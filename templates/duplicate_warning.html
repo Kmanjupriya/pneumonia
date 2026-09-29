@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Duplicate Radiograph Notice</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .card-custom { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; max-width: 700px; margin: 60px auto; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card card-custom p-4 p-md-5 shadow">
+        <div class="alert alert-warning border-warning">
+            <h5 class="fw-bold mb-2">Duplicate Radiograph Detected in System Database</h5>
+            <p class="mb-0">
+                This exact chest X-ray image has already been uploaded and processed previously.
+            </p>
+        </div>
+
+        <div class="p-3 bg-light rounded border mb-4">
+            <h6 class="fw-bold text-dark mb-2">Existing Report Details:</h6>
+            <ul class="mb-0 small text-secondary">
+                <li><strong>Report ID:</strong> #{{ existing['id'] }}</li>
+                <li><strong>Evaluation Timestamp:</strong> {{ existing['timestamp'] }}</li>
+                <li><strong>Evaluated By:</strong> {{ existing['evaluator_name'] }} ({{ existing['evaluator_role'] }})</li>
+                <li><strong>Registered Patient:</strong> {{ existing['patient_name'] }}</li>
+                <li><strong>Classification:</strong> {{ existing['prediction'] }} ({{ existing['confidence'] }}% confidence)</li>
+            </ul>
+        </div>
+
+        <p class="small text-muted mb-4">To prevent duplicate report generation, you may view the existing report directly, or confirm re-evaluation below.</p>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <a href="/report/{{ existing['id'] }}" class="btn btn-outline-primary btn-sm fw-bold">View Existing Report</a>
+
+            <form action="/predict" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="patient_name" value="{{ patient_name }}">
+                <input type="hidden" name="patient_age" value="{{ patient_age }}">
+                <input type="hidden" name="patient_gender" value="{{ patient_gender }}">
+                <input type="hidden" name="clinical_history" value="{{ clinical_history }}">
+                <input type="hidden" name="institution_name" value="{{ institution_name }}">
+                <input type="hidden" name="bypass_duplicate" value="true">
+                
+                <button type="button" onclick="alert('Please select the image file again to confirm re-evaluation.'); history.back();" class="btn btn-warning btn-sm fw-bold">Confirm Re-Evaluation</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Diagnostic Report - #{{ report['id'] }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .report-card { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .scan-frame { width: 100%; height: 320px; object-fit: contain; background: #000000; border-radius: 4px; }
+        .section-header { border-left: 4px solid #0284c7; padding-left: 10px; font-weight: 700; color: #0f172a; margin-bottom: 12px; }
+        .step-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px; margin-bottom: 12px; }
+    </style>
+</head>
+<body class="py-4">
+
+<div class="container" style="max-width: 920px;">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="/dashboard" class="btn btn-outline-secondary btn-sm fw-bold">Return to Dashboard</a>
+        <button onclick="window.print()" class="btn btn-primary btn-sm fw-bold">Print Official Document</button>
+    </div>
+
+    <div class="card report-card p-4 p-md-5">
+        <!-- Document Header -->
+        <div class="border-bottom pb-3 mb-4 d-flex justify-content-between align-items-center">
+            <div>
+                <h3 class="fw-bold text-dark mb-0">{{ report['institution_name'] }}</h3>
+                <span class="text-muted small">Department of Diagnostic Radiology & Artificial Intelligence Assessment</span>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-light text-dark border d-block mb-1">Report ID: #{{ report['id'] }}</span>
+                <span class="text-muted small">Generated: {{ report['timestamp'] }}</span>
+            </div>
+        </div>
+
+        <!-- Section 1: Patient & Evaluator Demographics -->
+        <h6 class="section-header">1. Patient & Evaluator Demographics</h6>
+        <div class="row g-2 bg-light p-3 rounded border mb-4 small">
+            <div class="col-md-4"><strong>Patient Name:</strong> {{ report['patient_name'] }}</div>
+            <div class="col-md-2"><strong>Age:</strong> {{ report['patient_age'] }} yrs</div>
+            <div class="col-md-3"><strong>Gender:</strong> {{ report['patient_gender'] }}</div>
+            <div class="col-md-3"><strong>Evaluated By:</strong> {{ report['evaluator_name'] }}</div>
+            <div class="col-md-6 border-top pt-2 mt-2">
+                <strong>Evaluator Role:</strong> {{ report['evaluator_role'] }}
+            </div>
+            <div class="col-md-6 border-top pt-2 mt-2">
+                <strong>Patient Type:</strong> {{ report['patient_type'] }}
+            </div>
+            <div class="col-md-12 mt-1">
+                <strong>Clinical Notes:</strong> {{ report['clinical_history'] }}
+            </div>
+        </div>
+
+        <!-- Section 2: Edit Form (Doctor/Admin Only) -->
+        {% if role in ['Doctor', 'Administrator'] %}
+        <div class="accordion mb-4" id="editAccordion">
+            <div class="accordion-item border-warning">
+                <h2 class="accordion-header" id="headingEdit">
+                    <button class="accordion-button collapsed py-2 text-dark fw-bold bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEdit">
+                        Modify Patient Record Details (Authorized Override)
+                    </button>
+                </h2>
+                <div id="collapseEdit" class="accordion-collapse collapse" data-bs-parent="#editAccordion">
+                    <div class="accordion-body bg-light">
+                        <form action="/edit_report/{{ report['id'] }}" method="POST" class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold">Patient Name</label>
+                                <input type="text" name="patient_name" class="form-control form-control-sm" value="{{ report['patient_name'] }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small fw-bold">Age</label>
+                                <input type="number" name="patient_age" class="form-control form-control-sm" value="{{ report['patient_age'] }}" required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold">Gender</label>
+                                <select name="patient_gender" class="form-select form-select-sm">
+                                    <option value="Female" {% if report['patient_gender'] == 'Female' %}selected{% endif %}>Female</option>
+                                    <option value="Male" {% if report['patient_gender'] == 'Male' %}selected{% endif %}>Male</option>
+                                    <option value="Other" {% if report['patient_gender'] == 'Other' %}selected{% endif %}>Other</option>
+                                </select>
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold">Clinical Notes</label>
+                                <textarea name="clinical_history" class="form-control form-control-sm" rows="2">{{ report['clinical_history'] }}</textarea>
+                            </div>
+                            <div class="col-md-12 mt-2 text-end">
+                                <button type="submit" class="btn btn-sm btn-warning fw-bold">Save Changes (Logs Before & After State to Audit Trail)</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Section 3: Chest Radiograph & Heatmap Comparison -->
+        <h6 class="section-header">2. Radiographic Scan Analysis</h6>
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="border p-2 bg-white rounded text-center">
+                    <span class="fw-bold small text-secondary d-block mb-2">Input Radiograph (CLAHE Preprocessed)</span>
+                    <img src="{{ url_for('static', filename='uploads/' + report['original_img']) }}" class="scan-frame">
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border p-2 bg-white rounded text-center">
+                    <span class="fw-bold small text-secondary d-block mb-2">Vision Transformer Spatial Attention (Grad-CAM)</span>
+                    <img src="{{ url_for('static', filename='uploads/' + report['heatmap_img']) }}" class="scan-frame">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Explainable AI Heatmap Breakdown -->
+        <h6 class="section-header">3. Explainable AI (Grad-CAM) Color Key</h6>
+        <div class="row g-2 mb-4">
+            <div class="col-md-6">
+                <div class="step-box">
+                    <span class="badge bg-danger mb-2">Red / Warm Regions</span>
+                    <p class="small text-secondary mb-0">High AI attention focus. Highlights dense lung tissue, fluid collection, or localized inflammatory consolidation.</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="step-box">
+                    <span class="badge bg-primary mb-2">Blue / Cool Regions</span>
+                    <p class="small text-secondary mb-0">Low/baseline AI attention focus. Represents normal, fully aerated clear lung fields.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 5: Structured Diagnostic Findings -->
+        <h6 class="section-header">4. Classification & Structured Observations</h6>
+        <div class="border rounded p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                <div>
+                    <span class="text-secondary small fw-bold">Automated Diagnosis:</span>
+                    {% if report['prediction'] == 'PNEUMONIA' %}
+                        <span class="badge bg-danger fs-6 ms-2">PNEUMONIA DETECTED</span>
+                    {% else %}
+                        <span class="badge bg-success fs-6 ms-2">NORMAL / CLEAR</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-secondary small fw-bold">Model Confidence:</span>
+                    <span class="badge bg-dark fs-6 ms-1">{{ report['confidence'] }}%</span>
+                </div>
+            </div>
+
+            <!-- Physician Technical Findings -->
+            {% if role in ['Doctor', 'Administrator'] %}
+            <div class="step-box border-primary mb-3">
+                <h6 class="fw-bold text-primary mb-2">Physician Technical Analysis (Radiological Findings)</h6>
+                {% if report['prediction'] == 'PNEUMONIA' %}
+                    <p class="small text-secondary mb-0">
+                        Feature activations from DenseNet-121 and ViT self-attention layers indicate localized parenchymal consolidation and increased tissue opacity. The Grad-CAM response exhibits concentrated high-intensity spatial clusters matching alveolar exudate patterns.
+                    </p>
+                {% else %}
+                    <p class="small text-secondary mb-0">
+                        Bilateral lung fields exhibit homogenous radiographic transparency. Self-attention features show no focal consolidation, pleural effusions, or significant infiltrate clusters above baseline thresholds.
+                    </p>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Clear Patient Overview -->
+            <div class="step-box border-success mb-0">
+                <h6 class="fw-bold text-success mb-2">Clear Patient Summary</h6>
+                {% if report['prediction'] == 'PNEUMONIA' %}
+                    <p class="small text-secondary mb-0">
+                        The scan analysis highlights red regions where lung tissue appears denser than surrounding areas. Denser lung tissue on X-rays usually indicates areas where fluid or inflammation is present.
+                    </p>
+                {% else %}
+                    <p class="small text-secondary mb-0">
+                        The scan analysis shows clear lung space with normal air movement areas. There are no highlighted red spots suggesting lung fluid or infection.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Section 6: Medical Disclaimer & Verification -->
+        <div class="alert alert-warning border-warning p-3 small mb-3">
+            <h6 class="fw-bold text-dark mb-1">Medical Decision Support Disclaimer</h6>
+            This preliminary evaluation was produced by an automated AI decision-support system. <strong>Final medical diagnosis, clinical evaluation, and treatment decisions must be made by a qualified physician using this report.</strong>
+        </div>
+
+        {% if report['patient_type'] != 'PUBLIC' or role in ['Doctor', 'Administrator'] %}
+        <div class="border-top pt-3 text-end text-muted small">
+            Report Evaluated & Issued By: <strong>{{ report['evaluator_name'] }} ({{ report['evaluator_role'] }})</strong>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+</body>
+</html>

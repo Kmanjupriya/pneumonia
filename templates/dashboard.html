@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clinical Portal Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f8fafc; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .top-bar { background: #ffffff; border-bottom: 1px solid #e2e8f0; }
+        .nav-tabs .nav-link { color: #64748b; font-weight: 500; }
+        .nav-tabs .nav-link.active { color: #0284c7; font-weight: 600; border-bottom: 2px solid #0284c7; }
+        .card-custom { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; }
+        .audit-state-box { font-family: -apple-system, BlinkMacSystemFont, monospace; font-size: 0.8rem; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; background-color: #ffffff; color: #334155; white-space: pre-wrap; word-break: break-word; max-width: 280px; }
+        
+        /* Floating Chatbot Widget */
+        .chat-widget-button { position: fixed; bottom: 20px; right: 20px; background-color: #0284c7; color: #ffffff; border: none; border-radius: 50%; width: 50px; height: 50px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); cursor: pointer; z-index: 1000; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+        .chat-widget-box { position: fixed; bottom: 80px; right: 20px; width: 340px; height: 420px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); display: none; flex-direction: column; z-index: 1000; overflow: hidden; }
+        .chat-header { background: #0f172a; color: #ffffff; padding: 10px 14px; font-weight: 600; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; }
+        .chat-body { flex: 1; padding: 12px; overflow-y: auto; background: #ffffff; font-size: 0.82rem; }
+        .chat-footer { padding: 8px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; gap: 6px; }
+        .chat-msg { margin-bottom: 8px; padding: 8px 10px; border-radius: 4px; max-width: 85%; font-size: 0.8rem; }
+        .chat-msg.bot { background: #f1f5f9; color: #0f172a; border: 1px solid #e2e8f0; align-self: flex-start; }
+        .chat-msg.user { background: #0284c7; color: #ffffff; margin-left: auto; align-self: flex-end; }
+    </style>
+</head>
+<body>
+
+<div class="top-bar px-4 py-3 d-flex justify-content-between align-items-center">
+    <div>
+        <span class="fw-bold fs-5 text-dark">{{ institution }}</span>
+        <span class="text-muted ms-2 fs-6">| Diagnostic Imaging Portal</span>
+    </div>
+    
+    <div class="d-flex align-items-center gap-4">
+        <div class="text-end">
+            <span class="d-block fw-bold text-dark small">User: {{ user }}</span>
+            <span class="d-block text-muted small">Role: {{ role }} {% if role == 'Patient' %}({{ patient_type }}){% endif %}</span>
+        </div>
+        <a href="/logout" class="btn btn-outline-danger btn-sm fw-bold">Sign Out</a>
+    </div>
+</div>
+
+<div class="container my-4">
+    <ul class="nav nav-tabs mb-4" id="portalTabs" role="tablist">
+        {% if role != 'Patient' or patient_type != 'PRIVATE_HOSPITAL' %}
+        <li class="nav-item">
+            <button class="nav-link active" id="scan-tab" data-bs-toggle="tab" data-bs-target="#scan-panel">New Evaluation</button>
+        </li>
+        {% endif %}
+        <li class="nav-item">
+            <button class="nav-link {% if role == 'Patient' and patient_type == 'PRIVATE_HOSPITAL' %}active{% endif %}" id="history-tab" data-bs-toggle="tab" data-bs-target="#history-panel">
+                {% if role in ['Doctor', 'Administrator'] %}
+                    Master Patient Records
+                {% else %}
+                    My Personal Records
+                {% endif %}
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics-panel">Diagnostic Statistics</button>
+        </li>
+        {% if role == 'Administrator' %}
+        <li class="nav-item">
+            <button class="nav-link text-dark fw-bold" id="admin-tab" data-bs-toggle="tab" data-bs-target="#admin-panel">Admin Management & Audit Trail</button>
+        </li>
+        {% endif %}
+    </ul>
+
+    <div class="tab-content" id="portalTabsContent">
+        <!-- TAB 1: NEW SCAN -->
+        {% if role != 'Patient' or patient_type != 'PRIVATE_HOSPITAL' %}
+        <div class="tab-pane fade show active" id="scan-panel">
+            <div class="card card-custom p-4">
+                <h6 class="fw-bold mb-3 text-dark border-bottom pb-2">Patient Intake and Diagnostic Evaluation</h6>
+                <form action="/predict" method="POST" enctype="multipart/form-data">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-secondary small fw-bold">Institution Name</label>
+                            <input type="text" name="institution_name" class="form-control" value="{{ institution }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-secondary small fw-bold">Evaluator Auto-Fill</label>
+                            <input type="text" class="form-control bg-light" value="{{ user }} ({{ role }})" readonly>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small fw-bold">Patient Name</label>
+                            <input type="text" name="patient_name" class="form-control" value="{% if role == 'Patient' %}{{ user }}{% endif %}" placeholder="Enter full name" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small fw-bold">Patient Age</label>
+                            <input type="number" name="patient_age" class="form-control" placeholder="Years" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-secondary small fw-bold">Gender</label>
+                            <select name="patient_gender" class="form-select">
+                                <option value="Female">Female</option>
+                                <option value="Male">Male</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-secondary small fw-bold">Clinical History / Symptoms</label>
+                        <textarea name="clinical_history" class="form-control" rows="2" placeholder="Clinical history or symptoms..."></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label text-secondary small fw-bold">Chest Radiograph File</label>
+                        <input type="file" name="file" class="form-control" accept="image/*" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold" style="background-color: #0284c7; border: none;">Run Diagnostic Assessment</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- TAB 2: HISTORY DATABASE -->
+        <div class="tab-pane fade {% if role == 'Patient' and patient_type == 'PRIVATE_HOSPITAL' %}show active{% endif %}" id="history-panel">
+            <div class="card card-custom p-4">
+                <h6 class="fw-bold mb-3 text-dark border-bottom pb-2">
+                    {% if role in ['Doctor', 'Administrator'] %}
+                        Master Patient Records Database
+                    {% else %}
+                        My Personal Diagnostic History
+                    {% endif %}
+                </h6>
+                {% if history %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Report ID</th>
+                                <th>Timestamp</th>
+                                <th>Patient Name</th>
+                                <th>Evaluated By</th>
+                                <th>Classification</th>
+                                <th>Confidence</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rec in history %}
+                            <tr>
+                                <td>#{{ rec['id'] }}</td>
+                                <td>{{ rec['timestamp'] }}</td>
+                                <td><strong>{{ rec['patient_name'] }}</strong></td>
+                                <td><span class="small text-muted">{{ rec['evaluator_name'] }} ({{ rec['evaluator_role'] }})</span></td>
+                                <td>
+                                    {% if rec['prediction'] == 'PNEUMONIA' %}
+                                        <span class="badge bg-danger">PNEUMONIA</span>
+                                    {% else %}
+                                        <span class="badge bg-success">NORMAL</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ rec['confidence'] }}%</td>
+                                <td class="d-flex gap-2">
+                                    <a href="/report/{{ rec['id'] }}" class="btn btn-sm btn-outline-primary fw-bold">View Report</a>
+                                    {% if role in ['Doctor', 'Administrator'] %}
+                                    <form action="/delete_report/{{ rec['id'] }}" method="POST" onsubmit="return confirm('Are you sure you want to delete Report #{{ rec['id'] }}? Action will be logged in audit trail.');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger fw-bold">Delete</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted border rounded">
+                    No diagnostic records located in current view.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- TAB 3: STATISTICS -->
+        <div class="tab-pane fade" id="analytics-panel">
+            <div class="card card-custom p-4">
+                <h6 class="fw-bold mb-3 text-dark border-bottom pb-2">Diagnostic Overview Statistics</h6>
+                {% if total_count > 0 %}
+                <div class="row align-items-center">
+                    <div class="col-md-6 text-center">
+                        <div style="max-width: 280px; margin: 0 auto;">
+                            <canvas id="diagChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-white">
+                            <h6 class="fw-bold mb-3">Diagnostic Summary</h6>
+                            <p class="mb-2 small">Total Evaluated Radiographs: <strong>{{ total_count }}</strong></p>
+                            <p class="mb-2 small text-danger">Pneumonia Scans: <strong>{{ pneumonia_count }}</strong></p>
+                            <p class="mb-0 small text-success">Normal Scans: <strong>{{ normal_count }}</strong></p>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="p-4 text-center text-muted border rounded">
+                    No statistical data available.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- TAB 4: CLEAN ADMIN PANEL -->
+        {% if role == 'Administrator' %}
+        <div class="tab-pane fade" id="admin-panel">
+            <!-- Doctor Roster -->
+            <div class="card card-custom p-4 mb-4">
+                <h6 class="fw-bold mb-3 text-dark border-bottom pb-2">Hospital Doctor Roster Authorization</h6>
+                
+                <form action="/admin/add_doctor" method="POST" class="row g-2 mb-4 p-2 border rounded bg-white">
+                    <div class="col-md-4">
+                        <input type="text" name="name" class="form-control form-control-sm" placeholder="Doctor Full Name (e.g. Dr. Ray)" required>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="email" name="email" class="form-control form-control-sm" placeholder="doctor@hospital.org" required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="password" name="password" class="form-control form-control-sm" placeholder="Password" required>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">Authorize Doctor</button>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Doctor Name</th>
+                                <th>Institutional Email</th>
+                                <th>Account Status</th>
+                                <th>Status Override</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for doc in doctors_list %}
+                            <tr>
+                                <td><strong>{{ doc['name'] }}</strong></td>
+                                <td>{{ doc['email'] }}</td>
+                                <td>
+                                    {% if doc['status'] == 'ACTIVE' %}
+                                        <span class="text-success fw-bold small">ACTIVE</span>
+                                    {% else %}
+                                        <span class="text-danger fw-bold small">BLOCKED</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form action="/admin/toggle_doctor_status/{{ doc['id'] }}" method="POST">
+                                        {% if doc['status'] == 'ACTIVE' %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2 fw-bold">Block Access</button>
+                                        {% else %}
+                                            <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2 fw-bold">Activate Access</button>
+                                        {% endif %}
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Clean System Audit Trail -->
+            <div class="card card-custom p-4">
+                <h6 class="fw-bold mb-3 text-dark border-bottom pb-2">System Audit Log (Before & After Report Details)</h6>
+                {% if audit_logs %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Action</th>
+                                <th>Target ID</th>
+                                <th>State BEFORE Modification</th>
+                                <th>State AFTER Modification</th>
+                                <th>Audit Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in audit_logs %}
+                            <tr>
+                                <td class="small text-muted">{{ log['timestamp'] }}</td>
+                                <td><strong>{{ log['performed_by'] }}</strong></td>
+                                <td><span class="small text-secondary">{{ log['user_role'] }}</span></td>
+                                <td><code>{{ log['action'] }}</code></td>
+                                <td>{% if log['target_report_id'] %}#{{ log['target_report_id'] }}{% else %}N/A{% endif %}</td>
+                                <td><div class="audit-state-box">{{ log['before_state'] if log['before_state'] else 'N/A' }}</div></td>
+                                <td><div class="audit-state-box">{{ log['after_state'] if log['after_state'] else 'N/A' }}</div></td>
+                                <td class="small">{{ log['details'] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted small">No audit records registered.</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- AI Chatbot Floating Widget -->
+<button class="chat-widget-button" onclick="toggleChatbot()">
+    <i class="bi bi-chat-dots"></i>
+</button>
+
+<div class="chat-widget-box" id="chatbotBox">
+    <div class="chat-header">
+        <span>Clinical Assistant</span>
+        <i class="bi bi-x-lg" style="cursor: pointer;" onclick="toggleChatbot()"></i>
+    </div>
+    <div class="chat-body" id="chatBody">
+        <div class="chat-msg bot">
+            Hello {{ user }}! Ask me about Grad-CAM heatmaps, user roles, duplicate checks, or audit logs.
+        </div>
+    </div>
+    <div class="chat-footer">
+        <input type="text" id="chatInput" class="form-control form-control-sm" placeholder="Ask a question..." onkeypress="handleChatKey(event)">
+        <button class="btn btn-sm btn-primary" onclick="sendChatMessage()"><i class="bi bi-send"></i></button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% if total_count > 0 %}
+<script>
+    const ctx = document.getElementById('diagChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Pneumonia', 'Normal'],
+            datasets: [{
+                data: [{{ pneumonia_count }}, {{ normal_count }}],
+                backgroundColor: ['#dc2626', '#16a34a']
+            }]
+        }
+    });
+</script>
+{% endif %}
+
+<script>
+    function toggleChatbot() {
+        const box = document.getElementById('chatbotBox');
+        box.style.display = (box.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function handleChatKey(e) {
+        if (e.key === 'Enter') sendChatMessage();
+    }
+
+    function sendChatMessage() {
+        const input = document.getElementById('chatInput');
+        const text = input.value.trim();
+        if (!text) return;
+
+        const body = document.getElementById('chatBody');
+        
+        const userMsg = document.createElement('div');
+        userMsg.className = 'chat-msg user';
+        userMsg.innerText = text;
+        body.appendChild(userMsg);
+
+        input.value = '';
+        body.scrollTop = body.scrollHeight;
+
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({message: text})
+        })
+        .then(res => res.json())
+        .then(data => {
+            const botMsg = document.createElement('div');
+            botMsg.className = 'chat-msg bot';
+            botMsg.innerText = data.response;
+            body.appendChild(botMsg);
+            body.scrollTop = body.scrollHeight;
+        })
+        .catch(() => {
+            const botMsg = document.createElement('div');
+            botMsg.className = 'chat-msg bot';
+            botMsg.innerText = "Query error. Please try again.";
+            body.appendChild(botMsg);
+            body.scrollTop = body.scrollHeight;
+        });
+    }
+</script>
+
+</body>
+</html>
